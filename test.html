@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Test d'équilibre</title>
+    <style>
+        table {
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        td {
+            width: 40px;
+            height: 40px;
+            border: 1px solid #333; /* Bordure pour toutes les cellules */
+            text-align: center;
+            cursor: pointer;
+        }
+        .disabled {
+            background-color: #ccc; /* Cases non utilisables */
+        }
+        .uranium {
+            background-color: #04a021; /* Uranium */
+        }
+        .graphite {
+            background-color: #4e5158; /* Graphite */
+        }
+        .empty {
+            background-color: white; /* Case vide */
+        }
+        .green {
+            color: green;
+        }
+        .red {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test d'équilibre du jeu</h1>
+    
+    <h3>Réglages de la chaleur</h3>
+    <div>
+        <label for="uranium">Valeur de l'Uranium :</label>
+        <input type="number" id="uranium" value="25">
+        <label for="graphite">Valeur du Graphite :</label>
+        <input type="number" id="graphite" value="-10">
+        <label for="penalty">Malus de proximité pour le graphite :</label>
+        <input type="number" id="penalty" value="-5">
+        <label for="uranium_bonus">Bonus d'uranium pour voisinage :</label>
+        <input type="number" id="uranium_bonus" value="5">
+        <label for="max_uranium_ratio">Uranium max par graphite :</label>
+        <input type="number" id="max_uranium_ratio" value="3">
+        <button onclick="calculate()">Calculer</button>
+    </div>
+    
+    <h3>Grille du jeu :</h3>
+    <table id="grid">
+        <!-- La grille sera générée ici -->
+    </table>
+
+    <h3>Résultats :</h3>
+    <p id="heat">Chaleur actuelle : 0</p> <!-- Affichage de la chaleur -->
+    <p id="ratio"></p> <!-- Affichage du ratio -->
+    
+    <script>
+        // Tableau initial avec X pour les cases non jouables et O pour les cases jouables
+        const gridData = [
+            "XXXOOOXXX",
+            "XXOOOOOXX",
+            "XOOOOOOOX",
+            "OOOOOOOOO",
+            "OOOOOOOOO",
+            "OOOOOOOOO",
+            "XOOOOOOOX",
+            "XXOOOOOXX",
+            "XXXOOOXXX"
+        ];
+
+        const gridContainer = document.getElementById('grid');
+
+        // Générer la grille (initiale)
+        function generateGrid() {
+            gridData.forEach((row, rowIndex) => {
+                const rowElement = document.createElement('tr');
+                [...row].forEach((cell, colIndex) => {
+                    const cellElement = document.createElement('td');
+                    if (cell === 'X') {
+                        cellElement.classList.add('disabled'); // Cases non utilisables
+                    } else {
+                        cellElement.classList.add('empty'); // Cases utilisables
+                        cellElement.addEventListener('click', () => handleCellClick(rowIndex, colIndex));
+                    }
+                    rowElement.appendChild(cellElement);
+                });
+                gridContainer.appendChild(rowElement);
+            });
+        }
+
+        // Gestion du clic sur une cellule pour définir son contenu
+        function handleCellClick(rowIndex, colIndex) {
+            const cell = gridData[rowIndex][colIndex];
+
+            // Empêcher la modification des cases non jouables
+            if (cell === 'X') return;
+
+            let newValue = prompt('Choisissez : (1) Uranium, (2) Graphite, (3) Vide', '3');
+
+            // Mise à jour de la cellule en fonction de la sélection
+            if (newValue == '1') {
+                gridData[rowIndex] = gridData[rowIndex].substr(0, colIndex) + 'U' + gridData[rowIndex].substr(colIndex + 1);
+            } else if (newValue == '2') {
+                gridData[rowIndex] = gridData[rowIndex].substr(0, colIndex) + 'G' + gridData[rowIndex].substr(colIndex + 1);
+            } else {
+                gridData[rowIndex] = gridData[rowIndex].substr(0, colIndex) + 'O' + gridData[rowIndex].substr(colIndex + 1);
+            }
+
+            updateGridDisplay(rowIndex, colIndex);
+            calculate(); // Recalcul de la chaleur après modification
+        }
+
+        // Mise à jour de l'affichage d'une seule cellule après un clic
+        function updateGridDisplay(rowIndex, colIndex) {
+            const cell = gridData[rowIndex][colIndex];
+            const row = gridContainer.rows[rowIndex];
+            const cellElement = row.cells[colIndex];
+
+            if (cell === 'U') {
+                cellElement.classList.add('uranium');
+                cellElement.classList.remove('graphite', 'empty');
+            } else if (cell === 'G') {
+                cellElement.classList.add('graphite');
+                cellElement.classList.remove('uranium', 'empty');
+            } else {
+                cellElement.classList.add('empty');
+                cellElement.classList.remove('uranium', 'graphite');
+            }
+        }
+
+        // Fonction pour vérifier les voisins d'un graphite et calculer un malus si entouré d'uranium
+        function calculateGraphitePenalty(rowIndex, colIndex) {
+            const directions = [
+                [-1, 0], [1, 0], [0, -1], [0, 1]  // Haut, Bas, Gauche, Droite
+            ];
+
+            let penalty = 0;
+            const penaltyValue = parseInt(document.getElementById('penalty').value); // Récupère le malus de proximité défini par l'utilisateur
+
+            directions.forEach(([dx, dy]) => {
+                const newRow = rowIndex + dx;
+                const newCol = colIndex + dy;
+
+                // Vérifie si la case voisine est valide
+                if (newRow >= 0 && newRow < gridData.length && newCol >= 0 && newCol < gridData[newRow].length) {
+                    if (gridData[newRow][newCol] === 'U') {
+                        penalty += penaltyValue; // Chaque uranium adjacente donne un malus basé sur la valeur définie
+                    }
+                }
+            });
+
+            return penalty;
+        }
+
+        // Fonction pour vérifier les voisins d'un uranium et calculer un bonus de chaleur si entouré d'uranium
+        function calculateUraniumBonus(rowIndex, colIndex) {
+            const directions = [
+                [-1, 0], [1, 0], [0, -1], [0, 1]  // Haut, Bas, Gauche, Droite
+            ];
+
+            let bonus = 0;
+            const bonusValue = parseInt(document.getElementById('uranium_bonus').value); // Récupère le bonus d'uranium défini par l'utilisateur
+
+            directions.forEach(([dx, dy]) => {
+                const newRow = rowIndex + dx;
+                const newCol = colIndex + dy;
+
+                // Vérifie si la case voisine est valide
+                if (newRow >= 0 && newRow < gridData.length && newCol >= 0 && newCol < gridData[newRow].length) {
+                    if (gridData[newRow][newCol] === 'U') {
+                        bonus += bonusValue; // Chaque uranium adjacente donne un bonus de chaleur
+                    }
+                }
+            });
+
+            return bonus;
+        }
+
+        // Calcul des résultats en fonction des valeurs d'uranium et de graphite
+        function calculate() {
+            const uraniumValue = parseInt(document.getElementById('uranium').value);  // Récupère la valeur de l'uranium
+            const graphiteValue = parseInt(document.getElementById('graphite').value); // Récupère la valeur du graphite
+            const maxUraniumRatio = parseInt(document.getElementById('max_uranium_ratio').value);
+
+            let totalHeat = 0;
+            let uraniumCount = 0;
+            let graphiteCount = 0;
+
+            gridData.forEach((row, rowIndex) => {
+                [...row].forEach((cell, colIndex) => {
+                    if (cell === 'U') {
+                        uraniumCount++;
+                        totalHeat += uraniumValue; // Ajouter la chaleur de l'uranium
+                        totalHeat += calculateUraniumBonus(rowIndex, colIndex); // Ajouter le bonus d'uranium si adjacent
+                    } else if (cell === 'G') {
+                        graphiteCount++;
+                        totalHeat += graphiteValue; // Ajouter la réduction de chaleur pour le graphite
+                        totalHeat += calculateGraphitePenalty(rowIndex, colIndex); // Ajouter le malus si graphite entouré d'uranium
+                    }
+                });
+            });
+
+            // Affichage de la chaleur
+            const heatElement = document.getElementById('heat');
+            heatElement.textContent = `Chaleur actuelle : ${totalHeat}`;
+
+            // Affichage du ratio
+            const ratioElement = document.getElementById('ratio');
+            const actualRatio = graphiteCount === 0 ? Infinity : uraniumCount / graphiteCount;
+            const isRatioRespected = actualRatio <= maxUraniumRatio;
+            
+            ratioElement.textContent = `Ratio Uranium/Graphite : ${actualRatio.toFixed(2)} (Max: ${maxUraniumRatio})`;
+            ratioElement.className = isRatioRespected ? 'green' : 'red';
+        }
+
+        // Initialisation de la grille et calcul de la chaleur au départ
+        generateGrid();
+        calculate(); // Calcul initial pour afficher la chaleur dès le départ
+    </script>
+</body>
+</html>
